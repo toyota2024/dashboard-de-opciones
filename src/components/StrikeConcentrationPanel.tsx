@@ -1,12 +1,14 @@
 import { InfoTooltip } from "./InfoTooltip";
+import type { Language } from "../lib/i18n";
 import type { OptionLevels, StrikeConcentration } from "../types/options";
 
 type StrikeConcentrationPanelProps = {
   concentrations: StrikeConcentration[];
   levels: OptionLevels;
+  language?: Language;
 };
 
-export function StrikeConcentrationPanel({ concentrations, levels }: StrikeConcentrationPanelProps) {
+export function StrikeConcentrationPanel({ concentrations, levels, language = "en" }: StrikeConcentrationPanelProps) {
   const topStrikes = [...concentrations]
     .sort((left, right) => right.totalOpenInterest - left.totalOpenInterest)
     .slice(0, 12);
@@ -14,9 +16,9 @@ export function StrikeConcentrationPanel({ concentrations, levels }: StrikeConce
   return (
     <section className="audit-panel audit-panel--wide">
       <p className="terminal-label">
-        <InfoTooltip termKey="openInterest" label="Open interest by strike" compact />
+        <InfoTooltip termKey="openInterest" label={language === "es" ? "Interes abierto por strike" : "Open interest by strike"} compact />
       </p>
-      <h3>Strike Concentration</h3>
+      <h3>{language === "es" ? "Concentracion por strike" : "Strike Concentration"}</h3>
 
       <div className="table-scroll">
         <table className="audit-table">
@@ -28,7 +30,7 @@ export function StrikeConcentrationPanel({ concentrations, levels }: StrikeConce
               <th><InfoTooltip termKey="openInterest" label="Total OI" compact /></th>
               <th><InfoTooltip termKey="volume" label="Call Vol" compact /></th>
               <th><InfoTooltip termKey="volume" label="Put Vol" compact /></th>
-              <th>Signal</th>
+              <th>{language === "es" ? "Senal" : "Signal"}</th>
             </tr>
           </thead>
           <tbody>

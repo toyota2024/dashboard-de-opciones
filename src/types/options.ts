@@ -4,17 +4,21 @@ export type Timeframe = {
   interval: string;
 };
 
-export type SelectedTimeframe = "5D_5M" | "30D_30M" | "3M_1D";
+export type PrimaryTimeframe = "1D_1M" | "5D_15M" | "3M_4H" | "1Y_1D";
+export type LegacyTimeframe = "5D_5M" | "30D_30M" | "3M_1D";
+export type SelectedTimeframe = PrimaryTimeframe | LegacyTimeframe;
 export type MarketTimeframeKey = SelectedTimeframe;
 
 export type ActiveView = "projections" | "supportResistance";
 
 export type MarketTimeframeMetadata = {
   key: SelectedTimeframe;
-  alpacaTimeframe: "5Min" | "30Min" | "1Day";
+  alpacaTimeframe: "1Min" | "5Min" | "15Min" | "30Min" | "1Hour" | "1Day";
+  displayInterval?: "1m" | "5m" | "15m" | "30m" | "4H" | "1D";
   lookbackDays: number;
   limit: number;
   candlesReturned: number;
+  warning?: "LIMITED_INTRADAY_DATA";
 };
 
 export type OptionType = "call" | "put";

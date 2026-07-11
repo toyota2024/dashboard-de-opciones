@@ -96,11 +96,13 @@ export function AutoEvaluationControls({
       <section className="auto-evaluation-results" aria-label="Auto evaluation results">
         <div className="audit-title-row">
           <div>
-            <p className="terminal-label">Latest run</p>
+            <p className="terminal-label">{language === "es" ? "Ultima ejecucion" : "Latest run"}</p>
           <h3>{t("autoEvaluationResults", language)}</h3>
           </div>
           <span className="data-pill">
-            {summary.evaluated} evaluated / {summary.closed} closed / {summary.open} open / {summary.errors} errors
+            {language === "es"
+              ? `${summary.evaluated} evaluadas / ${summary.closed} cerradas / ${summary.open} abiertas / ${summary.errors} errores`
+              : `${summary.evaluated} evaluated / ${summary.closed} closed / ${summary.open} open / ${summary.errors} errors`}
           </span>
         </div>
 

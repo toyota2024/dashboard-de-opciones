@@ -14,47 +14,53 @@ export function TradeReadPanel({ tradeRead, dataSource, language = "en" }: Trade
   return (
     <section className="side-section">
       <h3>{language === "es" ? "Capa de lectura" : "Trade Read Layer"}</h3>
-      <DataSourceBadges dataSource={dataSource} compact language={language} />
-      <dl className="metric-list metric-list--trade">
-        <div>
-          <dt>
-            <InfoTooltip termKey="scenarioProbabilities" label={language === "es" ? "Regimen principal" : "Primary regime"} compact />
-          </dt>
-          <dd>{tradeRead.primaryRegime}</dd>
+      <div className="trade-read-compact">
+        <DataSourceBadges dataSource={dataSource} compact language={language} />
+
+        <div className="trade-read-row">
+          <span>
+            <InfoTooltip termKey="scenarioProbabilities" label={language === "es" ? "Regimen" : "Regime"} compact />
+          </span>
+          <strong>{tradeRead.primaryRegime}</strong>
         </div>
-        <div>
-          <dt>
-            <InfoTooltip termKey="callWall" label={language === "es" ? "Nivel de opciones" : "Options level"} compact />
-          </dt>
-          <dd>{tradeRead.optionsLevel}</dd>
+
+        <div className="trade-read-row">
+          <span>
+            <InfoTooltip termKey="callWall" label={language === "es" ? "Niveles S/R" : "S/R Levels"} compact />
+          </span>
+          <strong>{tradeRead.optionsLevel}</strong>
         </div>
-        <div>
-          <dt>{language === "es" ? "Mejor estructura" : "Best structure"}</dt>
-          <dd>{tradeRead.bestStructure}</dd>
+
+        <div className="trade-read-row">
+          <span>{language === "es" ? "Lectura" : "Read"}</span>
+          <strong>{tradeRead.bestStructure}</strong>
         </div>
-        <div>
-          <dt>{language === "es" ? "Nota de riesgo" : "Risk note"}</dt>
-          <dd>{tradeRead.riskNote}</dd>
+
+        <div className="trade-read-mini-grid" aria-label={language === "es" ? "Metricas de lectura" : "Read metrics"}>
+          <div>
+            <span>
+              <InfoTooltip termKey="iv" label={language === "es" ? "IV" : "IV"} compact />
+            </span>
+            <strong>{tradeRead.weightedIV}</strong>
+          </div>
+          <div>
+            <span>
+              <InfoTooltip termKey="dte" label="DTE" compact />
+            </span>
+            <strong>{tradeRead.avgDte}</strong>
+          </div>
+          <div>
+            <span>
+              <InfoTooltip termKey="filteredContracts" label={language === "es" ? "Contratos" : "Contracts"} compact />
+            </span>
+            <strong>{tradeRead.filteredContracts}</strong>
+          </div>
         </div>
-        <div>
-          <dt>
-            <InfoTooltip termKey="filteredContracts" compact />
-          </dt>
-          <dd>{tradeRead.filteredContracts}</dd>
-        </div>
-        <div>
-          <dt>
-            <InfoTooltip termKey="iv" label="Weighted IV" compact />
-          </dt>
-          <dd>{tradeRead.weightedIV}</dd>
-        </div>
-        <div>
-          <dt>
-            <InfoTooltip termKey="dte" label="Avg DTE" compact />
-          </dt>
-          <dd>{tradeRead.avgDte}</dd>
-        </div>
-      </dl>
+
+        <p className="trade-read-risk">
+          <span>{language === "es" ? "Nota de riesgo" : "Risk note"}:</span> {tradeRead.riskNote}
+        </p>
+      </div>
     </section>
   );
 }

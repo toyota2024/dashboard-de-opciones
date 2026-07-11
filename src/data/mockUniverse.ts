@@ -1,11 +1,7 @@
-import { createMockOptionChain } from "./createMockOptionChain";
+import { buildMockExpirations, createMockOptionChain } from "./createMockOptionChain";
 import type { ModelConfig, PricePoint, RawOptionProjectionInput } from "../types/options";
 
-const expirations = [
-  { expiration: "2026-07-10", dte: 16 },
-  { expiration: "2026-07-17", dte: 23 },
-  { expiration: "2026-07-24", dte: 30 },
-];
+const expirations = buildMockExpirations([16, 23, 30]);
 
 const defaultModelConfig: ModelConfig = {
   minOpenInterest: 450,
@@ -135,9 +131,10 @@ export const mockUniverse: RawOptionProjectionInput[] = tickerConfigs.map((confi
     changePercent: config.changePercent,
     lastCandleDate: "6/24/2026",
     timeframes: [
-      { label: "5D / 5M", range: "5D", interval: "5M" },
-      { label: "30D / 30M", range: "30D", interval: "30M" },
-      { label: "3M / 1D", range: "3M", interval: "1D" },
+      { label: "1D / 1m", range: "1D", interval: "1m" },
+      { label: "5D / 15m", range: "5D", interval: "15m" },
+      { label: "3M / 4H", range: "3M", interval: "4H" },
+      { label: "1Y / 1D", range: "1Y", interval: "1D" },
     ],
     layers: ["Projections", "Support / Resistance"],
   },

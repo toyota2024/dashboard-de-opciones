@@ -18,8 +18,9 @@ export function createServerMockOptionChain({
   baseIv,
 }: ServerMockOptionChainInput): OptionContract[] {
   const center = Math.round(spot / strikeStep) * strikeStep;
-  const expirations = dteList.map((dte, index) => ({
-    expiration: buildExpirationDate(index),
+  const baseDate = new Date();
+  const expirations = dteList.map((dte) => ({
+    expiration: buildExpirationDate(baseDate, dte),
     dte,
   }));
 
@@ -60,8 +61,9 @@ export function chooseServerMockBaseIv(ticker: string): number {
   return ivByTicker[ticker] ?? 0.35;
 }
 
-function buildExpirationDate(index: number): string {
-  const expirations = ["2026-07-10", "2026-07-17", "2026-07-24"];
+function buildExpirationDate(baseDate: Date, dte: number): string {
+  const expiration = new Date(baseDate);
+  expiration.setUTCDate(expiration.getUTCDate() + dte);
 
-  return expirations[index] ?? expirations[expirations.length - 1];
+  return expiration.toISOString().slice(0, 10);
 }

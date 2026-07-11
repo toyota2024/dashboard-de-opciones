@@ -1,10 +1,6 @@
-import { createMockOptionChain } from "./createMockOptionChain";
+import { buildMockExpirations, createMockOptionChain } from "./createMockOptionChain";
 
-const expirations = [
-  { expiration: "2026-07-10", dte: 16 },
-  { expiration: "2026-07-17", dte: 23 },
-  { expiration: "2026-07-24", dte: 30 },
-];
+const expirations = buildMockExpirations([16, 23, 30]);
 
 // MU mock chain with a strong call wall near 1200, put wall near 1000, and max-pain pressure near 850.
 export const mockOptionChain = createMockOptionChain({

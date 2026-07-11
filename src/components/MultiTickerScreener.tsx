@@ -53,15 +53,26 @@ export function MultiTickerScreener({
   const [rejectionFilter, setRejectionFilter] = useState<RejectionFilter>("all");
   const [searchTicker, setSearchTicker] = useState("");
   const [trackedTicker, setTrackedTicker] = useState("");
-  const screenerTitle = providerName === "backend" ? "MULTI-TICKER CUSTOM WATCHLIST SCAN" : "MULTI-TICKER MOCK WATCHLIST SCAN";
+  const screenerTitle = providerName === "backend" ? "MULTI-TICKER HYBRID SCAN" : "MULTI-TICKER MOCK SCAN";
   const screenerBadge = providerName === "backend" ? "Alpaca market / Mock options" : "Mock demo universe";
-  const visibleRows = useMemo(
-    () =>
-      rows
-        .filter((row) => matchesFilters(row, { statusFilter, biasFilter, scoreFilter, acceptedFilter, rejectionFilter, searchTicker }))
-        .sort((left, right) => compareRows(left, right, sortKey, sortDirection)),
-    [acceptedFilter, biasFilter, rejectionFilter, rows, scoreFilter, searchTicker, sortDirection, sortKey, statusFilter],
+  const normalizedSearchTicker = searchTicker.trim().toUpperCase();
+  const searchedRows = useMemo(
+    () => rows.filter((row) => normalizedSearchTicker === "" || row.ticker.includes(normalizedSearchTicker)),
+    [normalizedSearchTicker, rows],
   );
+  const visibleRows = useMemo(() => {
+    const filteredRows = searchedRows.filter((row) =>
+      matchesFilters(row, {
+        statusFilter,
+        biasFilter,
+        scoreFilter,
+        acceptedFilter,
+        rejectionFilter,
+      }),
+    );
+
+    return [...filteredRows].sort((left, right) => compareRows(left, right, sortKey, sortDirection));
+  }, [acceptedFilter, biasFilter, rejectionFilter, scoreFilter, searchedRows, sortDirection, sortKey, statusFilter]);
 
   function trackSignal(row: ScreenerRow) {
     onTrackSignal(row);
@@ -89,13 +100,13 @@ export function MultiTickerScreener({
       <div className="screener-controls" aria-label="Screener sorting and filters">
         <label>
           <span>{t("searchTicker", language)}</span>
-          <input value={searchTicker} onChange={(event) => setSearchTicker(event.target.value.toUpperCase())} placeholder="AAPL" />
+          <input value={searchTicker} onChange={(event) => setSearchTicker(event.target.value.toUpperCase())} placeholder="Ticker" />
         </label>
         <Select label={t("sortBy", language)} value={sortKey} onChange={(value) => setSortKey(value as SortKey)}>
           <option value="score">Score</option>
           <option value="bullishProbability">Bull %</option>
           <option value="neutralProbability">Neutral %</option>
-          <option value="bearishProbability">Bear %</option>
+          <option value="bearishProbability">{language === "es" ? "Bajista %" : "Bear %"}</option>
           <option value="weightedIV">IV</option>
           <option value="acceptedContracts">Accepted contracts</option>
           <option value="rejectionRate">Rejection rate</option>
@@ -115,9 +126,9 @@ export function MultiTickerScreener({
         </Select>
         <Select label={t("bias", language)} value={biasFilter} onChange={(value) => setBiasFilter(value as BiasFilter)}>
           <option value="all">{t("all", language)}</option>
-          <option value="bullish">Bullish</option>
+          <option value="bullish">{language === "es" ? "Alcista" : "Bullish"}</option>
           <option value="neutral">Neutral</option>
-          <option value="bearish">Bearish</option>
+          <option value="bearish">{language === "es" ? "Bajista" : "Bearish"}</option>
         </Select>
         <Select label={t("minimumScore", language)} value={scoreFilter} onChange={(value) => setScoreFilter(value as ScoreFilter)}>
           <option value="all">{t("all", language)}</option>
@@ -166,19 +177,19 @@ export function MultiTickerScreener({
                 <th><InfoTooltip termKey="screenerGrade" label={t("grade", language)} compact /></th>
                 <th>{t("price", language)}</th>
                 <th>{t("bias", language)}</th>
-                <th>Bull %</th>
+                <th>{language === "es" ? "Alcista %" : "Bull %"}</th>
                 <th>Neutral %</th>
-                <th>Bear %</th>
+                <th>{language === "es" ? "Bajista %" : "Bear %"}</th>
                 <th>Call Wall</th>
                 <th>Put Wall</th>
                 <th>Max Pain</th>
                 <th><InfoTooltip termKey="iv" label="IV" compact /></th>
-                <th>Avg DTE</th>
-                <th><InfoTooltip termKey="filteredContracts" label="Accepted" compact /></th>
-                <th>Rejected</th>
+                <th>{language === "es" ? "DTE prom." : "Avg DTE"}</th>
+                <th><InfoTooltip termKey="filteredContracts" label={language === "es" ? "Aceptados" : "Accepted"} compact /></th>
+                <th>{language === "es" ? "Rechazados" : "Rejected"}</th>
                 <th><InfoTooltip termKey="rejectionRate" label="Rej %" compact /></th>
                 <th>{t("status", language)}</th>
-                <th>Action</th>
+                <th>{language === "es" ? "Accion" : "Action"}</th>
               </tr>
             </thead>
             <tbody>
@@ -260,11 +271,9 @@ function matchesFilters(
     scoreFilter: ScoreFilter;
     acceptedFilter: AcceptedFilter;
     rejectionFilter: RejectionFilter;
-    searchTicker: string;
   },
 ): boolean {
   const bias = row.primaryRegime.toLowerCase();
-  const searchTicker = filters.searchTicker.trim().toLowerCase();
   const minimumScore = filters.scoreFilter === "all" ? 0 : Number(filters.scoreFilter);
   const minimumAccepted = filters.acceptedFilter === "all" ? 0 : Number(filters.acceptedFilter);
   const maxRejection = filters.rejectionFilter === "all" ? Number.POSITIVE_INFINITY : Number(filters.rejectionFilter);
@@ -274,8 +283,7 @@ function matchesFilters(
     (filters.biasFilter === "all" || bias.includes(filters.biasFilter)) &&
     row.screenerScore >= minimumScore &&
     row.acceptedContracts >= minimumAccepted &&
-    row.rejectionRate <= maxRejection &&
-    (searchTicker === "" || row.ticker.toLowerCase().includes(searchTicker))
+    row.rejectionRate <= maxRejection
   );
 }
 

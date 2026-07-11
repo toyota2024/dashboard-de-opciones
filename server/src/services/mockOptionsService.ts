@@ -77,15 +77,12 @@ export function createMockOptionChain({
 export function createTemporaryMockOptionChainForSpot(ticker: string, spot: number): OptionContract[] {
   const step = chooseStrikeStep(spot);
   const center = Math.round(spot / step) * step;
+  const baseDate = new Date();
 
   return createMockOptionChain({
     ticker,
     spot,
-    expirations: [
-      { expiration: "2026-07-10", dte: 16 },
-      { expiration: "2026-07-17", dte: 23 },
-      { expiration: "2026-07-24", dte: 30 },
-    ],
+    expirations: buildMockExpirations([16, 23, 30], baseDate),
     strikeMin: Math.max(step, center - step * 6),
     strikeMax: center + step * 6,
     strikeStep: step,
@@ -200,4 +197,18 @@ function chooseBaseIv(ticker: string): number {
   };
 
   return ivByTicker[ticker] ?? 0.35;
+}
+
+function buildMockExpirations(dteList: number[], baseDate: Date): MockExpiration[] {
+  const chainBaseDate = new Date(baseDate);
+
+  return dteList.map((dte) => {
+    const expiration = new Date(chainBaseDate);
+    expiration.setUTCDate(expiration.getUTCDate() + dte);
+
+    return {
+      expiration: expiration.toISOString().slice(0, 10),
+      dte,
+    };
+  });
 }

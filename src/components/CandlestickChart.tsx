@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   getOhlcPriceRange,
   indexToChartX,
@@ -7,6 +7,7 @@ import {
 } from "../lib/candlestickScale";
 import { formatPrice } from "../lib/formatters";
 import { calculateEMA } from "../lib/indicators";
+import type { Language } from "../lib/i18n";
 import type { ExpectedMove, OptionLevels, PricePoint, SelectedTimeframe } from "../types/options";
 import type { NormalizedCandle } from "../lib/candlestickScale";
 
@@ -20,6 +21,8 @@ type CandlestickChartProps = {
   selectedTimeframe: SelectedTimeframe;
   marketLabel: string;
   candlesLoaded: number;
+  scaleMode?: "price" | "projection";
+  language?: Language;
 };
 
 type HoverState = {
@@ -28,13 +31,44 @@ type HoverState = {
   y: number;
 };
 
+type VisibleRange = {
+  startIndex: number;
+  endIndex: number;
+};
+
+type DragState = {
+  startX: number;
+  range: VisibleRange;
+};
+
 const width = 1120;
-const height = 620;
-const margin = { top: 30, right: 94, bottom: 48, left: 18 };
-const priceHeight = 420;
-const volumeTop = 486;
-const volumeHeight = 82;
+const height = 560;
+const margin = { top: 8, right: 94, bottom: 10, left: 18 };
+const priceHeight = 440;
+const volumeTop = 462;
+const volumeHeight = 66;
 const plotRight = width - margin.right;
+const plotClipId = "candlestick-price-plot-clip";
+
+const defaultVisibleCounts: Record<SelectedTimeframe, number> = {
+  "1D_1M": 45,
+  "5D_15M": 80,
+  "3M_4H": 70,
+  "1Y_1D": 100,
+  "5D_5M": 45,
+  "30D_30M": 80,
+  "3M_1D": 70,
+};
+
+const minVisibleCounts: Record<SelectedTimeframe, number> = {
+  "1D_1M": 15,
+  "5D_15M": 25,
+  "3M_4H": 20,
+  "1Y_1D": 30,
+  "5D_5M": 15,
+  "30D_30M": 25,
+  "3M_1D": 20,
+};
 
 export function CandlestickChart({
   historicalPath,
@@ -46,19 +80,32 @@ export function CandlestickChart({
   selectedTimeframe,
   marketLabel,
   candlesLoaded,
+  scaleMode = "price",
+  language = "en",
 }: CandlestickChartProps) {
   const [hover, setHover] = useState<HoverState | null>(null);
+  const [showEmas, setShowEmas] = useState(false);
+  const [visibleRange, setVisibleRange] = useState<VisibleRange>(() => getDefaultVisibleRange(0, selectedTimeframe));
+  const [dragState, setDragState] = useState<DragState | null>(null);
   const candles = useMemo(() => normalizeCandles(historicalPath), [historicalPath]);
+  const renderRange =
+    candles.length > 1 && visibleRange.startIndex === 0 && visibleRange.endIndex === 0
+      ? getDefaultVisibleRange(candles.length, selectedTimeframe)
+      : visibleRange;
+  const clampedRange = clampVisibleRange(renderRange, candles.length);
+  const visibleCandles = candles.slice(clampedRange.startIndex, clampedRange.endIndex + 1);
   const visibleProjectedPath = showProjectionOverlays ? projectedPath : [];
-  const [minPrice, maxPrice] = getOhlcPriceRange(historicalPath, levels, expectedMove);
+  const showFullCone = showProjectionOverlays && scaleMode === "projection";
+  const showPriceScaleProjectionPath = showProjectionOverlays && scaleMode === "price";
+  const [minPrice, maxPrice] = getOhlcPriceRange(visibleCandles, levels, expectedMove, scaleMode, selectedTimeframe);
   const plotWidth = plotRight - margin.left;
-  const lastCandle = candles[candles.length - 1];
-  const activeIndex = hover?.index ?? Math.max(candles.length - 1, 0);
-  const activeCandle = candles[activeIndex] ?? lastCandle;
-  const maxVolume = Math.max(...candles.map((candle) => candle.volume), 1);
-  const totalSlots = candles.length + visibleProjectedPath.length;
-  const historicalEndIndex = Math.max(candles.length - 1, 0);
-  const closes = candles.map((candle) => candle.close);
+  const lastCandle = visibleCandles[visibleCandles.length - 1];
+  const activeIndex = hover?.index ?? Math.max(visibleCandles.length - 1, 0);
+  const activeCandle = visibleCandles[activeIndex] ?? lastCandle;
+  const maxVolume = Math.max(...visibleCandles.map((candle) => candle.volume), 1);
+  const totalSlots = visibleCandles.length + visibleProjectedPath.length;
+  const historicalEndIndex = Math.max(visibleCandles.length - 1, 0);
+  const closes = visibleCandles.map((candle) => candle.close);
   const ema20 = calculateEMA(closes, 20);
   const ema50 = calculateEMA(closes, 50);
   const ema200 = calculateEMA(closes, 200);
@@ -67,7 +114,7 @@ export function CandlestickChart({
   const yForPrice = (price: number) => margin.top + (priceToChartY(price, minPrice, maxPrice) / 100) * priceHeight;
   const priceForY = (y: number) => maxPrice - ((y - margin.top) / priceHeight) * (maxPrice - minPrice);
   const projectedPoints = visibleProjectedPath.map((point, index) => ({
-    x: xForIndex(candles.length + index),
+    x: xForIndex(visibleCandles.length + index),
     projection: point.projection ?? expectedMove.base,
     expectedLow1: point.expectedLow1 ?? expectedMove.low1Sigma,
     expectedHigh1: point.expectedHigh1 ?? expectedMove.high1Sigma,
@@ -91,11 +138,16 @@ export function CandlestickChart({
     ...projectedPoints.map((point) => `${point.x},${yForPrice(point.projection)}`),
   ].join(" ");
   const priceTicks = buildPriceTicks(minPrice, maxPrice);
-  const timeTicks = buildTimeTicks(candles, selectedTimeframe);
-  const candleWidth = Math.max(2, Math.min(18, (plotWidth / Math.max(totalSlots, 1)) * 0.62));
+  const timeTicks = buildTimeTicks(visibleCandles, selectedTimeframe);
+  const candleWidth = Math.max(3, Math.min(12, (plotWidth / Math.max(visibleCandles.length, 1)) * 0.82));
   const activeX = hover?.x ?? xForIndex(activeIndex);
   const activeY = hover?.y ?? (activeCandle ? yForPrice(activeCandle.close) : margin.top);
   const activePrice = priceForY(activeY);
+
+  useEffect(() => {
+    setVisibleRange(getDefaultVisibleRange(candles.length, selectedTimeframe));
+    setHover(null);
+  }, [candles.length, selectedTimeframe, ticker]);
 
   function handlePointerMove(event: React.PointerEvent<SVGSVGElement>) {
     const point = event.currentTarget.createSVGPoint();
@@ -109,13 +161,58 @@ export function CandlestickChart({
     const transformed = point.matrixTransform(screenMatrix.inverse());
     const clampedX = Math.max(margin.left, Math.min(plotRight, transformed.x));
     const clampedY = Math.max(margin.top, Math.min(volumeTop + volumeHeight, transformed.y));
-    const nearestIndex = getNearestCandleIndex(clampedX, candles.length, totalSlots, plotWidth);
+    if (dragState) {
+      const candleSpan = Math.max(1, clampedRange.endIndex - clampedRange.startIndex + 1);
+      const pixelsPerCandle = plotWidth / candleSpan;
+      const deltaCandles = Math.round((dragState.startX - clampedX) / pixelsPerCandle);
+
+      setVisibleRange(shiftVisibleRange(dragState.range, deltaCandles, candles.length));
+      return;
+    }
+
+    const nearestIndex = getNearestCandleIndex(clampedX, visibleCandles.length, totalSlots, plotWidth);
 
     setHover({
       index: nearestIndex,
       x: xForIndex(nearestIndex),
       y: clampedY,
     });
+  }
+
+  function handlePointerDown(event: React.PointerEvent<SVGSVGElement>) {
+    if (event.button !== 0 || visibleCandles.length <= 1) return;
+
+    const point = event.currentTarget.createSVGPoint();
+    point.x = event.clientX;
+    point.y = event.clientY;
+    const screenMatrix = event.currentTarget.getScreenCTM();
+    if (!screenMatrix) return;
+
+    const transformed = point.matrixTransform(screenMatrix.inverse());
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragState({
+      startX: Math.max(margin.left, Math.min(plotRight, transformed.x)),
+      range: clampedRange,
+    });
+  }
+
+  function stopDragging() {
+    setDragState(null);
+  }
+
+  function zoomVisibleRange(factor: number) {
+    setVisibleRange((range) => zoomRange(clampVisibleRange(range, candles.length), factor, candles.length, selectedTimeframe));
+    setHover(null);
+  }
+
+  function resetVisibleRange() {
+    setVisibleRange(getDefaultVisibleRange(candles.length, selectedTimeframe));
+    setHover(null);
+  }
+
+  function fitVisibleRange() {
+    setVisibleRange({ startIndex: 0, endIndex: Math.max(candles.length - 1, 0) });
+    setHover(null);
   }
 
   return (
@@ -125,7 +222,12 @@ export function CandlestickChart({
           <strong>{ticker}</strong>
           <span>{getTimeframeBadge(selectedTimeframe)}</span>
           <span>{marketLabel}</span>
-          <span>{candlesLoaded} candles</span>
+          <span>{candlesLoaded} {language === "es" ? "velas" : "candles"}</span>
+          <span>
+            {language === "es"
+              ? `Mostrando ${visibleCandles.length} de ${candles.length}`
+              : `Showing ${visibleCandles.length} of ${candles.length}`}
+          </span>
         </div>
         {activeCandle && (
           <div className="ohlcv-strip">
@@ -133,26 +235,48 @@ export function CandlestickChart({
             <span>H {formatPrice(activeCandle.high)}</span>
             <span>L {formatPrice(activeCandle.low)}</span>
             <span>C {formatPrice(activeCandle.close)}</span>
-            <span>Vol {formatVolume(activeCandle.volume)}</span>
+            <span>{language === "es" ? "Vol" : "Vol"} {formatVolume(activeCandle.volume)}</span>
             <span className={activeCandle.close >= activeCandle.open ? "value-positive" : "value-negative"}>
               {formatCandleChange(activeCandle)}
             </span>
           </div>
         )}
+        <button
+          className={`ema-toggle ${showEmas ? "is-active" : ""}`}
+          onClick={() => setShowEmas((current) => !current)}
+          type="button"
+        >
+          {language === "es" ? "Mostrar EMAs" : "Show EMAs"}
+        </button>
+        <div className="chart-nav-controls" aria-label={language === "es" ? "Navegacion del chart" : "Chart navigation"}>
+          <button onClick={() => zoomVisibleRange(0.65)} type="button">Zoom +</button>
+          <button onClick={() => zoomVisibleRange(1.35)} type="button">Zoom -</button>
+          <button onClick={resetVisibleRange} type="button">Reset</button>
+          <button onClick={fitVisibleRange} type="button">{language === "es" ? "Ajustar" : "Fit"}</button>
+        </div>
       </div>
 
       <svg
         className="candlestick-svg"
         role="img"
         viewBox={`0 0 ${width} ${height}`}
+        onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
-        onPointerLeave={() => setHover(null)}
+        onPointerUp={stopDragging}
+        onPointerCancel={stopDragging}
+        onPointerLeave={() => {
+          setHover(null);
+          stopDragging();
+        }}
       >
         <defs>
           <linearGradient id="tvBg" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor="#071019" />
             <stop offset="100%" stopColor="#03070b" />
           </linearGradient>
+          <clipPath id={plotClipId}>
+            <rect x={margin.left} y={margin.top} width={plotWidth} height={priceHeight} />
+          </clipPath>
         </defs>
         <rect width={width} height={height} fill="url(#tvBg)" />
         <rect x={margin.left} y={margin.top} width={plotWidth} height={priceHeight} fill="#050b12" />
@@ -170,26 +294,28 @@ export function CandlestickChart({
         ))}
 
         {timeTicks.map((index) => (
-          <g key={`${candles[index]?.timestamp}-${index}`}>
+          <g key={`${visibleCandles[index]?.timestamp}-${index}`}>
             <line x1={xForIndex(index)} x2={xForIndex(index)} y1={margin.top} y2={volumeTop + volumeHeight} stroke="rgba(255,255,255,0.045)" />
             <text x={xForIndex(index)} y={height - 15} fill="#8da2b4" fontSize="11" textAnchor="middle">
-              {formatTimeLabel(candles[index], selectedTimeframe)}
+              {formatTimeLabel(visibleCandles[index], selectedTimeframe)}
             </text>
           </g>
         ))}
 
-        {showProjectionOverlays && twoSigmaPolygon && <polygon points={twoSigmaPolygon} fill="rgba(58,134,255,0.12)" />}
-        {showProjectionOverlays && oneSigmaPolygon && <polygon points={oneSigmaPolygon} fill="rgba(255,209,102,0.16)" />}
-        {renderLevel("Resistance / Call Wall", levels.resistance, "#ff6b6b", yForPrice)}
-        {renderLevel("Spot", levels.spot, "#9bf870", yForPrice, "2 0", true)}
-        {renderLevel("Support / Put Wall", levels.support, "#54d2ff", yForPrice)}
-        {renderLevel("Max Pain", levels.maxPain, "#ffd166", yForPrice, "4 7")}
+        <g clipPath={`url(#${plotClipId})`}>
+          {showFullCone && twoSigmaPolygon && <polygon points={twoSigmaPolygon} fill="rgba(58,134,255,0.12)" />}
+          {showFullCone && oneSigmaPolygon && <polygon points={oneSigmaPolygon} fill="rgba(255,209,102,0.16)" />}
+          {renderLevel(language === "es" ? "Resistencia / Call Wall" : "Resistance / Call Wall", levels.resistance, "#ff6b6b", yForPrice)}
+          {renderLevel("Spot", levels.spot, "#9bf870", yForPrice, "2 0", true)}
+          {renderLevel(language === "es" ? "Soporte / Put Wall" : "Support / Put Wall", levels.support, "#54d2ff", yForPrice)}
+          {renderLevel("Max Pain", levels.maxPain, "#ffd166", yForPrice, "4 7")}
 
-        {renderEmaPath(ema20, candles, xForIndex, yForPrice, "#f8fbff")}
-        {renderEmaPath(ema50, candles, xForIndex, yForPrice, "#ffd166")}
-        {renderEmaPath(ema200, candles, xForIndex, yForPrice, "#3a86ff")}
+          {showEmas && renderEmaPath(ema20, visibleCandles, xForIndex, yForPrice, "#f8fbff")}
+          {showEmas && renderEmaPath(ema50, visibleCandles, xForIndex, yForPrice, "#ffd166")}
+          {showEmas && renderEmaPath(ema200, visibleCandles, xForIndex, yForPrice, "#3a86ff")}
+        </g>
 
-        {candles.map((candle, index) => {
+        {visibleCandles.map((candle, index) => {
           const x = xForIndex(index);
           const up = candle.close >= candle.open;
           const color = up ? "#26a69a" : "#ef5350";
@@ -228,11 +354,18 @@ export function CandlestickChart({
           );
         })}
 
-        {showProjectionOverlays && (
-          <>
+        {(showFullCone || showPriceScaleProjectionPath) && (
+          <g clipPath={`url(#${plotClipId})`}>
             <line x1={anchorX} x2={anchorX} y1={margin.top} y2={volumeTop + volumeHeight} stroke="rgba(255,255,255,0.18)" strokeDasharray="5 8" />
-            <polyline points={projectionLine} fill="none" stroke="#f8f9fa" strokeWidth="2.4" strokeDasharray="7 7" />
-          </>
+            <polyline
+              points={projectionLine}
+              fill="none"
+              stroke="#f8f9fa"
+              strokeWidth={scaleMode === "price" ? "1.5" : "2.4"}
+              strokeDasharray="7 7"
+              opacity={scaleMode === "price" ? "0.48" : "1"}
+            />
+          </g>
         )}
 
         {lastCandle && renderCurrentPriceLabel(lastCandle.close, yForPrice(lastCandle.close))}
@@ -259,18 +392,20 @@ export function CandlestickChart({
               <span>{formatTooltipTime(activeCandle, selectedTimeframe)}</span>
               <span>O {formatPrice(activeCandle.open)} H {formatPrice(activeCandle.high)}</span>
               <span>L {formatPrice(activeCandle.low)} C {formatPrice(activeCandle.close)}</span>
-              <span>Vol {formatVolume(activeCandle.volume)}</span>
+              <span>{language === "es" ? "Volumen" : "Vol"} {formatVolume(activeCandle.volume)}</span>
               <em className={activeCandle.close >= activeCandle.open ? "value-positive" : "value-negative"}>{formatCandleChange(activeCandle)}</em>
             </div>
           </foreignObject>
         )}
 
         <text x={margin.left + 10} y={volumeTop - 10} fill="#8da2b4" fontSize="12">
-          Volume
+          {language === "es" ? "Volumen" : "Volume"}
         </text>
-        <text x={margin.left + 10} y={margin.top + 18} fill="#8da2b4" fontSize="11">
-          EMA 20 / EMA 50 / EMA 200
-        </text>
+        {showEmas && (
+          <text x={margin.left + 10} y={margin.top + 18} fill="#8da2b4" fontSize="11">
+            EMA 20 / EMA 50 / EMA 200
+          </text>
+        )}
       </svg>
     </div>
   );
@@ -295,6 +430,67 @@ function renderLevel(
       </text>
     </g>
   );
+}
+
+function getDefaultVisibleRange(candleCount: number, timeframe: SelectedTimeframe): VisibleRange {
+  if (candleCount <= 0) {
+    return { startIndex: 0, endIndex: 0 };
+  }
+
+  const visibleCount = Math.min(getDefaultVisibleCount(timeframe), candleCount);
+
+  return {
+    startIndex: Math.max(0, candleCount - visibleCount),
+    endIndex: candleCount - 1,
+  };
+}
+
+function clampVisibleRange(range: VisibleRange, candleCount: number): VisibleRange {
+  if (candleCount <= 0) {
+    return { startIndex: 0, endIndex: 0 };
+  }
+
+  const span = Math.max(1, range.endIndex - range.startIndex + 1);
+  let startIndex = Math.max(0, Math.min(range.startIndex, candleCount - 1));
+  let endIndex = Math.min(candleCount - 1, startIndex + span - 1);
+
+  if (endIndex - startIndex + 1 < span) {
+    startIndex = Math.max(0, endIndex - span + 1);
+  }
+
+  return { startIndex, endIndex };
+}
+
+function shiftVisibleRange(range: VisibleRange, delta: number, candleCount: number): VisibleRange {
+  const span = Math.max(1, range.endIndex - range.startIndex + 1);
+  const maxStart = Math.max(0, candleCount - span);
+  const startIndex = Math.max(0, Math.min(maxStart, range.startIndex + delta));
+
+  return {
+    startIndex,
+    endIndex: Math.min(candleCount - 1, startIndex + span - 1),
+  };
+}
+
+function zoomRange(range: VisibleRange, factor: number, candleCount: number, timeframe: SelectedTimeframe): VisibleRange {
+  if (candleCount <= 0) return { startIndex: 0, endIndex: 0 };
+
+  const currentSpan = Math.max(1, range.endIndex - range.startIndex + 1);
+  const nextSpan = Math.max(getMinVisibleCount(candleCount, timeframe), Math.min(candleCount, Math.round(currentSpan * factor)));
+  const center = (range.startIndex + range.endIndex) / 2;
+  const startIndex = Math.round(center - nextSpan / 2);
+
+  return clampVisibleRange({ startIndex, endIndex: startIndex + nextSpan - 1 }, candleCount);
+}
+
+function getDefaultVisibleCount(timeframe: SelectedTimeframe): number {
+  return defaultVisibleCounts[timeframe] ?? 100;
+}
+
+function getMinVisibleCount(candleCount: number, timeframe?: SelectedTimeframe): number {
+  const minimum = timeframe ? minVisibleCounts[timeframe] : 20;
+
+  return Math.min(minimum ?? 20, Math.max(1, candleCount));
 }
 
 function renderCurrentPriceLabel(price: number, y: number) {
@@ -344,7 +540,7 @@ function buildPriceTicks(minPrice: number, maxPrice: number): number[] {
 function buildTimeTicks(candles: NormalizedCandle[], timeframe: SelectedTimeframe): number[] {
   if (candles.length === 0) return [];
 
-  const maxTicks = timeframe === "5D_5M" ? 8 : timeframe === "30D_30M" ? 9 : 7;
+  const maxTicks = timeframe === "1D_1M" ? 8 : timeframe === "5D_15M" ? 9 : timeframe === "3M_4H" ? 8 : timeframe === "5D_5M" ? 8 : timeframe === "30D_30M" ? 9 : 7;
   const step = Math.max(1, Math.ceil(candles.length / maxTicks));
   const ticks = candles.map((_, index) => index).filter((index) => index % step === 0);
   const last = candles.length - 1;
@@ -365,10 +561,10 @@ function formatTimeLabel(candle: NormalizedCandle | undefined, timeframe: Select
   const date = new Date(candle.timestamp);
 
   if (Number.isNaN(date.getTime())) return candle.date;
-  if (timeframe === "5D_5M") {
+  if (timeframe === "1D_1M" || timeframe === "5D_5M") {
     return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   }
-  if (timeframe === "30D_30M") {
+  if (timeframe === "5D_15M" || timeframe === "3M_4H" || timeframe === "30D_30M") {
     return date.toLocaleString("en-US", { month: "short", day: "numeric" });
   }
   return date.toLocaleString("en-US", { month: "short", day: "numeric" });
@@ -378,7 +574,7 @@ function formatTooltipTime(candle: NormalizedCandle, timeframe: SelectedTimefram
   const date = new Date(candle.timestamp);
 
   if (Number.isNaN(date.getTime())) return candle.date;
-  if (timeframe === "3M_1D") {
+  if (timeframe === "1Y_1D" || timeframe === "3M_1D") {
     return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
   return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -386,6 +582,10 @@ function formatTooltipTime(candle: NormalizedCandle, timeframe: SelectedTimefram
 
 function getTimeframeBadge(timeframe: SelectedTimeframe): string {
   const labels: Record<SelectedTimeframe, string> = {
+    "1D_1M": "1D / 1m",
+    "5D_15M": "5D / 15m",
+    "3M_4H": "3M / 4H",
+    "1Y_1D": "1Y / 1D",
     "5D_5M": "5D / 5M",
     "30D_30M": "30D / 30M",
     "3M_1D": "3M / 1D",

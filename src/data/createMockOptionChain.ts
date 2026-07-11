@@ -72,6 +72,15 @@ export function createMockOptionChain({
   );
 }
 
+export function buildMockExpirations(dteList: number[], baseDate = new Date()): MockExpiration[] {
+  const chainBaseDate = new Date(baseDate);
+
+  return dteList.map((dte) => ({
+    expiration: formatExpirationDate(addDays(chainBaseDate, dte)),
+    dte,
+  }));
+}
+
 function buildContract({
   ticker,
   spot,
@@ -153,4 +162,15 @@ function proximityBoost(strike: number, target: number, width: number): number {
 function round(value: number, decimals: number): number {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+
+  return next;
+}
+
+function formatExpirationDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }

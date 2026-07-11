@@ -1,11 +1,7 @@
 import { createMockOptionChain } from "./mockOptionsService.js";
 import type { ModelConfig, PricePoint, RawOptionProjectionInput } from "../types.js";
 
-const expirations = [
-  { expiration: "2026-07-10", dte: 16 },
-  { expiration: "2026-07-17", dte: 23 },
-  { expiration: "2026-07-24", dte: 30 },
-];
+const expirations = buildMockExpirations([16, 23, 30], new Date());
 
 const defaultModelConfig: ModelConfig = {
   minOpenInterest: 450,
@@ -51,9 +47,10 @@ export const mockUniverse: RawOptionProjectionInput[] = tickerConfigs.map((confi
     changePercent: config.changePercent,
     lastCandleDate: "6/24/2026",
     timeframes: [
-      { label: "5D / 5M", range: "5D", interval: "5M" },
-      { label: "30D / 30M", range: "30D", interval: "30M" },
-      { label: "3M / 1D", range: "3M", interval: "1D" },
+      { label: "1D / 1m", range: "1D", interval: "1m" },
+      { label: "5D / 15m", range: "5D", interval: "15m" },
+      { label: "3M / 4H", range: "3M", interval: "4H" },
+      { label: "1Y / 1D", range: "1Y", interval: "1D" },
     ],
     layers: ["Projections", "Support / Resistance"],
   },
@@ -172,4 +169,18 @@ function buildCandle({
 function round(value: number, decimals: number): number {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
+}
+
+function buildMockExpirations(dteList: number[], baseDate: Date) {
+  const chainBaseDate = new Date(baseDate);
+
+  return dteList.map((dte) => {
+    const expiration = new Date(chainBaseDate);
+    expiration.setUTCDate(expiration.getUTCDate() + dte);
+
+    return {
+      expiration: expiration.toISOString().slice(0, 10),
+      dte,
+    };
+  });
 }

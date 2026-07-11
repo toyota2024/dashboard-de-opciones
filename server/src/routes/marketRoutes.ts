@@ -5,10 +5,10 @@ import { getTickerProjection, getUniverseTickers } from "../services/mockMarketS
 import {
   AlpacaMarketDataError,
   buildQuoteSnapshot,
-  getAlpacaHistoricalBars,
+  getAlpacaHistoricalBarsForTimeframe,
   getAlpacaLatestQuote,
 } from "../services/alpacaMarketService.js";
-import { getStartDateForTimeframe, resolveMarketTimeframe } from "../services/marketTimeframeService.js";
+import { resolveMarketTimeframe } from "../services/marketTimeframeService.js";
 
 const tickerSchema = z
   .string()
@@ -37,11 +37,7 @@ marketRoutes.get("/ticker/:ticker", async (request, response) => {
       const marketTimeframe = resolveMarketTimeframe(readTimeframeQuery(request.query.timeframe));
       const [quote, historicalPath] = await Promise.all([
         getAlpacaLatestQuote(result.data),
-        getAlpacaHistoricalBars(result.data, {
-          timeframe: marketTimeframe.alpacaTimeframe,
-          start: getStartDateForTimeframe(marketTimeframe),
-          limit: marketTimeframe.limit,
-        }),
+        getAlpacaHistoricalBarsForTimeframe(result.data, marketTimeframe),
       ]);
 
       response.json({
@@ -50,6 +46,7 @@ marketRoutes.get("/ticker/:ticker", async (request, response) => {
         marketTimeframe: {
           ...marketTimeframe,
           candlesReturned: historicalPath.length,
+          warning: marketTimeframe.key === "1D_1M" && historicalPath.length < 25 ? "LIMITED_INTRADAY_DATA" : undefined,
         },
       });
     } catch (error) {

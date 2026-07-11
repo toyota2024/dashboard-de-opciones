@@ -1,14 +1,16 @@
 import { useMemo, useState } from "react";
 import { InfoTooltip } from "./InfoTooltip";
+import type { Language } from "../lib/i18n";
 import type { OptionChainRow, OptionType } from "../types/options";
 
 type ChainFilter = "all" | OptionType;
 
 type OptionChainPanelProps = {
   rows: OptionChainRow[];
+  language?: Language;
 };
 
-export function OptionChainPanel({ rows }: OptionChainPanelProps) {
+export function OptionChainPanel({ rows, language = "en" }: OptionChainPanelProps) {
   const [filter, setFilter] = useState<ChainFilter>("all");
   const visibleContracts = useMemo(
     () => rows.filter((contract) => filter === "all" || contract.type === filter).slice(0, 30),
@@ -19,13 +21,13 @@ export function OptionChainPanel({ rows }: OptionChainPanelProps) {
     <section className="audit-panel audit-panel--wide">
       <div className="audit-panel-header">
         <div>
-          <p className="terminal-label">Accepted contracts</p>
-          <h3>Filtered Option Chain</h3>
+          <p className="terminal-label">{language === "es" ? "Contratos aceptados" : "Accepted contracts"}</p>
+          <h3>{language === "es" ? "Option Chain filtrada" : "Filtered Option Chain"}</h3>
         </div>
         <div className="mini-tabs" aria-label="Filter option chain">
           {(["all", "call", "put"] as const).map((item) => (
             <button className={filter === item ? "is-active" : ""} key={item} onClick={() => setFilter(item)} type="button">
-              {item === "all" ? "All" : item === "call" ? "Calls" : "Puts"}
+              {item === "all" ? (language === "es" ? "Todos" : "All") : item === "call" ? "Calls" : "Puts"}
             </button>
           ))}
         </div>
@@ -35,7 +37,7 @@ export function OptionChainPanel({ rows }: OptionChainPanelProps) {
         <table className="audit-table">
           <thead>
             <tr>
-              <th>Type</th>
+              <th>{language === "es" ? "Tipo" : "Type"}</th>
               <th>Exp</th>
               <th><InfoTooltip termKey="dte" compact /></th>
               <th>Strike</th>

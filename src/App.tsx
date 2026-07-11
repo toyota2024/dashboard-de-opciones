@@ -3,21 +3,16 @@ import { AutoEvaluationControls } from "./components/AutoEvaluationControls";
 import { DataModeToggle } from "./components/DataModeToggle";
 import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
 import { DataSourceBadges } from "./components/DataSourceBadges";
-import { ExpectedMovePanel } from "./components/ExpectedMovePanel";
-import { GlossaryPanel } from "./components/GlossaryPanel";
 import { Header } from "./components/Header";
 import { HistoryBackupPanel } from "./components/HistoryBackupPanel";
-import { InfoTooltip } from "./components/InfoTooltip";
 import { LanguageToggle } from "./components/LanguageToggle";
 import { ModelControlPanel } from "./components/ModelControlPanel";
 import { MultiTickerScreener } from "./components/MultiTickerScreener";
 import { OptionChainPanel } from "./components/OptionChainPanel";
 import { PerformanceSummaryPanel } from "./components/PerformanceSummaryPanel";
-import { ProjectionChart } from "./components/ProjectionChart";
-import { ScenarioPanel } from "./components/ScenarioPanel";
 import { SignalHistoryPanel } from "./components/SignalHistoryPanel";
 import { StrikeConcentrationPanel } from "./components/StrikeConcentrationPanel";
-import { TradeReadPanel } from "./components/TradeReadPanel";
+import { TickerAnalysisSection } from "./components/TickerAnalysisSection";
 import { WatchlistManager } from "./components/WatchlistManager";
 import {
   defaultAutoEvaluationRule,
@@ -107,7 +102,7 @@ function App() {
   const [controlState, setControlState] = useState<ModelControlState | null>(null);
   const [appliedConfig, setAppliedConfig] = useState<ModelConfig | null>(null);
   const [selectedTicker, setSelectedTicker] = useState("MU");
-  const [selectedTimeframe, setSelectedTimeframe] = useState<SelectedTimeframe>("3M_1D");
+  const [selectedTimeframe, setSelectedTimeframe] = useState<SelectedTimeframe>("5D_15M");
   const [activeView, setActiveView] = useState<ActiveView>("projections");
   const [controlError, setControlError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -784,9 +779,20 @@ function App() {
         <section className="empty-ticker-state" aria-label="Ticker search empty state">
           <p className="terminal-label">{t("realAlpaca", language)}</p>
           <h2>{t("searchToBegin", language)}</h2>
-          <span>{t("alpacaSupportedSymbolsNote", language)}</span>
+          <span>{language === "es" ? "El analisis del ticker aparecera aqui." : "The ticker analysis will appear here."}</span>
+          <small>{t("alpacaSupportedSymbolsNote", language)}</small>
         </section>
       )}
+
+      {data ? (
+        <TickerAnalysisSection
+          data={data}
+          activeView={activeView}
+          language={language}
+          providerName={providerName}
+          selectedTimeframe={selectedTimeframe}
+        />
+      ) : null}
 
       <WatchlistManager
         activeTickers={activeUniverseTickers}
@@ -807,6 +813,24 @@ function App() {
         onOpen={openTicker}
         onTrackSignal={trackSignal}
       />
+
+      {data ? (
+        <section className="audit-section" aria-label="Options engine audit">
+          <div className="audit-title-row">
+            <div>
+              <p className="terminal-label">{language === "es" ? "Transparencia del motor" : "Options engine transparency"}</p>
+              <h2>{dataSourceCopy.auditTitle}</h2>
+            </div>
+            <DataSourceBadges dataSource={data.dataSource} compact language={language} />
+          </div>
+
+          <div className="audit-grid">
+            <DiagnosticsPanel diagnostics={data.diagnostics} language={language} />
+            <StrikeConcentrationPanel concentrations={data.diagnostics.strikeConcentration} levels={data.levels} language={language} />
+            <OptionChainPanel rows={data.optionChainRows} language={language} />
+          </div>
+        </section>
+      ) : null}
 
       <PerformanceSummaryPanel summary={performanceSummary} language={language} />
 
@@ -844,97 +868,6 @@ function App() {
         autoEvaluationRule={autoEvaluationRule}
         onImportSignals={importSignalHistory}
       />
-
-      {data ? (
-        <>
-          <div className="dashboard-grid">
-            <ProjectionChart
-              historicalPath={data.historicalPath}
-              projectedPath={data.projectedPath}
-              expectedMove={data.expectedMove}
-              levels={data.levels}
-              ticker={data.ticker}
-              dataSource={data.dataSource}
-              selectedTimeframe={selectedTimeframe}
-              activeView={activeView}
-              marketTimeframe={data.marketTimeframe}
-              useLocalTimeframeFilter={providerName === "mock"}
-            />
-
-            <aside className="side-panel" aria-label="Projection details">
-              <section className="projection-head">
-                <p className="terminal-label">
-                  <InfoTooltip termKey="projectionHead" compact />
-                </p>
-                <strong>{data.projectionHead}</strong>
-                <span>{data.projectionDescription}</span>
-              </section>
-
-              {activeView === "projections" ? (
-                <>
-                  <ScenarioPanel scenarios={data.scenarios} />
-                  <ExpectedMovePanel expectedMove={data.expectedMove} />
-                </>
-              ) : (
-                <section className="side-section">
-                  <h3>Support / Resistance Focus</h3>
-                  <dl className="metric-list">
-                    <div>
-                      <dt>
-                        <InfoTooltip termKey="support" compact />
-                      </dt>
-                      <dd>{data.levels.support}</dd>
-                    </div>
-                    <div>
-                      <dt>
-                        <InfoTooltip termKey="resistance" compact />
-                      </dt>
-                      <dd>{data.levels.resistance}</dd>
-                    </div>
-                    <div>
-                      <dt>
-                        <InfoTooltip termKey="putWall" compact />
-                      </dt>
-                      <dd>{data.levels.support}</dd>
-                    </div>
-                    <div>
-                      <dt>
-                        <InfoTooltip termKey="callWall" compact />
-                      </dt>
-                      <dd>{data.levels.resistance}</dd>
-                    </div>
-                    <div>
-                      <dt>
-                        <InfoTooltip termKey="maxPain" compact />
-                      </dt>
-                      <dd>{data.levels.maxPain}</dd>
-                    </div>
-                  </dl>
-                </section>
-              )}
-              <TradeReadPanel tradeRead={data.tradeRead} dataSource={data.dataSource} language={language} />
-            </aside>
-          </div>
-
-          <section className="audit-section" aria-label="Options engine audit">
-            <div className="audit-title-row">
-              <div>
-                <p className="terminal-label">Options engine transparency</p>
-                <h2>{dataSourceCopy.auditTitle}</h2>
-              </div>
-              <DataSourceBadges dataSource={data.dataSource} compact language={language} />
-            </div>
-
-            <div className="audit-grid">
-              <DiagnosticsPanel diagnostics={data.diagnostics} />
-              <StrikeConcentrationPanel concentrations={data.diagnostics.strikeConcentration} levels={data.levels} />
-              <OptionChainPanel rows={data.optionChainRows} />
-            </div>
-          </section>
-        </>
-      ) : null}
-
-      <GlossaryPanel language={language} />
 
       <p className="disclaimer">{dataSourceCopy.footerText}</p>
     </main>
@@ -1046,9 +979,10 @@ function getEmptyHeaderSnapshot(): HeaderSnapshot {
     formattedChange: "-",
     formattedLastCandleDate: "-",
     timeframes: [
-      { label: "5D / 5M", range: "5D", interval: "5M" },
-      { label: "30D / 30M", range: "30D", interval: "30M" },
-      { label: "3M / 1D", range: "3M", interval: "1D" },
+      { label: "1D / 1m", range: "1D", interval: "1m" },
+      { label: "5D / 15m", range: "5D", interval: "15m" },
+      { label: "3M / 4H", range: "3M", interval: "4H" },
+      { label: "1Y / 1D", range: "1Y", interval: "1D" },
     ],
     layers: ["Projections", "Support / Resistance"],
   };

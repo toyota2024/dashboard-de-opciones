@@ -4,6 +4,7 @@ import {
   createServerMockOptionChain,
 } from "./mockOptionChainFactory.js";
 import { getStartDateForTimeframe, resolveMarketTimeframe } from "./marketTimeframeService.js";
+import type { MarketTimeframeConfig } from "./marketTimeframeService.js";
 import type { MarketTimeframeKey, PricePoint, QuoteSnapshot, RawOptionProjectionInput } from "../types.js";
 
 type AlpacaBar = {
@@ -34,7 +35,7 @@ type AlpacaLatestQuote = {
 };
 
 type HistoricalBarsOptions = {
-  timeframe?: "5Min" | "30Min" | "1Day";
+  timeframe?: "1Min" | "5Min" | "15Min" | "30Min" | "1Hour" | "1Day";
   start?: string;
   end?: string;
   limit?: number;
@@ -154,18 +155,32 @@ export async function getAlpacaHistoricalBars(ticker: string, options: Historica
   }));
 }
 
+export async function getAlpacaHistoricalBarsForTimeframe(
+  ticker: string,
+  config: MarketTimeframeConfig,
+): Promise<PricePoint[]> {
+  const bars = await getAlpacaHistoricalBars(ticker, {
+    timeframe: config.alpacaTimeframe,
+    start: getStartDateForTimeframe(config),
+    limit: config.limit,
+  });
+  const sessionBars = config.key === "1D_1M" ? filterRegularMarketSession(bars) : bars;
+
+  if (config.resampleToHours === 4) {
+    return resamplePricePointsToFourHours(sessionBars).slice(-config.limit);
+  }
+
+  return sessionBars;
+}
+
 export async function getAlpacaMarketProjectionInput(
   ticker: string,
-  timeframeKey: MarketTimeframeKey = "3M_1D",
+  timeframeKey: MarketTimeframeKey = "5D_15M",
 ): Promise<RawOptionProjectionInput> {
   const marketTimeframeConfig = resolveMarketTimeframe(timeframeKey);
   const [latestQuote, historicalPath] = await Promise.all([
     getAlpacaLatestQuote(ticker),
-    getAlpacaHistoricalBars(ticker, {
-      timeframe: marketTimeframeConfig.alpacaTimeframe,
-      start: getStartDateForTimeframe(marketTimeframeConfig),
-      limit: marketTimeframeConfig.limit,
-    }),
+    getAlpacaHistoricalBarsForTimeframe(ticker, marketTimeframeConfig),
   ]);
   const latestBar = historicalPath[historicalPath.length - 1];
   const previousBar = historicalPath[historicalPath.length - 2];
@@ -210,6 +225,7 @@ export async function getAlpacaMarketProjectionInput(
     marketTimeframe: {
       ...marketTimeframeConfig,
       candlesReturned: historicalPath.length,
+      warning: getMarketTimeframeWarning(marketTimeframeConfig, historicalPath.length),
     },
   };
 }
@@ -222,12 +238,93 @@ export function buildQuoteSnapshot(input: AlpacaLatestQuote): QuoteSnapshot {
     changePercent: input.changePercent,
     lastCandleDate: formatDateLabel(input.latestCandle),
     timeframes: [
-      { label: "5D / 5M", range: "5D", interval: "5M" },
-      { label: "30D / 30M", range: "30D", interval: "30M" },
-      { label: "3M / 1D", range: "3M", interval: "1D" },
+      { label: "1D / 1m", range: "1D", interval: "1m" },
+      { label: "5D / 15m", range: "5D", interval: "15m" },
+      { label: "3M / 4H", range: "3M", interval: "4H" },
+      { label: "1Y / 1D", range: "1Y", interval: "1D" },
     ],
     layers: ["Projections", "Support / Resistance"],
   };
+}
+
+function resamplePricePointsToFourHours(points: PricePoint[]): PricePoint[] {
+  const byDay = new Map<string, PricePoint[]>();
+
+  points.forEach((point) => {
+    const timestamp = point.timestamp ?? point.date;
+    const day = timestamp.slice(0, 10);
+    const dayPoints = byDay.get(day) ?? [];
+    dayPoints.push(point);
+    byDay.set(day, dayPoints);
+  });
+
+  return [...byDay.values()].flatMap((dayPoints) => {
+    const sorted = [...dayPoints].sort((left, right) => {
+      const leftTime = new Date(left.timestamp ?? left.date).getTime();
+      const rightTime = new Date(right.timestamp ?? right.date).getTime();
+
+      return leftTime - rightTime;
+    });
+    const chunks: PricePoint[] = [];
+
+    for (let index = 0; index < sorted.length; index += 4) {
+      const block = sorted.slice(index, index + 4);
+      const first = block[0];
+      const last = block[block.length - 1];
+      const high = Math.max(...block.map((point) => point.high ?? point.close ?? point.price ?? 0));
+      const low = Math.min(...block.map((point) => point.low ?? point.close ?? point.price ?? 0));
+      const volume = block.reduce((total, point) => total + (point.volume ?? 0), 0);
+      const close = last.close ?? last.price ?? 0;
+
+      chunks.push({
+        date: last.date,
+        timestamp: last.timestamp ?? last.date,
+        open: first.open ?? first.price ?? close,
+        high,
+        low,
+        close,
+        volume,
+        price: close,
+      });
+    }
+
+    return chunks;
+  });
+}
+
+function getMarketTimeframeWarning(
+  config: MarketTimeframeConfig,
+  candlesReturned: number,
+): "LIMITED_INTRADAY_DATA" | undefined {
+  if (config.key === "1D_1M" && candlesReturned < 25) {
+    return "LIMITED_INTRADAY_DATA";
+  }
+
+  return undefined;
+}
+
+function filterRegularMarketSession(points: PricePoint[]): PricePoint[] {
+  const sessionPoints = points.filter((point) => isRegularMarketTimestamp(point.timestamp ?? point.date));
+
+  return sessionPoints.length > 0 ? sessionPoints : points;
+}
+
+function isRegularMarketTimestamp(timestamp: string): boolean {
+  const date = new Date(timestamp);
+
+  if (Number.isNaN(date.getTime())) return true;
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? 0);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? 0);
+  const minutes = (hour === 24 ? 0 : hour) * 60 + minute;
+
+  return minutes >= 9 * 60 + 30 && minutes <= 16 * 60;
 }
 
 function midpoint(bid?: number, ask?: number): number | undefined {

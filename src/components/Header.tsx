@@ -11,7 +11,12 @@ type HeaderProps = {
   onActiveViewChange: (view: ActiveView) => void;
 };
 
-const timeframeKeys: SelectedTimeframe[] = ["5D_5M", "30D_30M", "3M_1D"];
+const primaryTimeframes: Array<{ key: SelectedTimeframe; label: Record<Language, string> }> = [
+  { key: "1D_1M", label: { es: "1D / 1m", en: "1D / 1m" } },
+  { key: "5D_15M", label: { es: "5D / 15m", en: "5D / 15m" } },
+  { key: "3M_4H", label: { es: "3M / 4H", en: "3M / 4H" } },
+  { key: "1Y_1D", label: { es: "1A / 1D", en: "1Y / 1D" } },
+];
 const viewKeys: ActiveView[] = ["projections", "supportResistance"];
 
 export function Header({
@@ -38,15 +43,15 @@ export function Header({
 
       <nav className="control-cluster" aria-label="Chart controls">
         <div className="segmented-control" aria-label="Timeframe">
-          {snapshot.timeframes.map((timeframe, index) => (
+          {primaryTimeframes.map((timeframe) => (
             <button
-              aria-pressed={selectedTimeframe === timeframeKeys[index]}
-              className={`toggle-button ${selectedTimeframe === timeframeKeys[index] ? "active" : ""}`}
-              key={timeframe.label}
-              onClick={() => onTimeframeChange(timeframeKeys[index])}
+              aria-pressed={selectedTimeframe === timeframe.key}
+              className={`toggle-button ${selectedTimeframe === timeframe.key ? "active" : ""}`}
+              key={timeframe.key}
+              onClick={() => onTimeframeChange(timeframe.key)}
               type="button"
             >
-              {timeframe.label}
+              {timeframe.label[language]}
             </button>
           ))}
         </div>

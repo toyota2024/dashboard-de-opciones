@@ -15,7 +15,7 @@ export const mockDataProvider: DataProvider = {
   },
 };
 
-function withMockDataSource(projection: RawOptionProjectionInput, timeframe: SelectedTimeframe = "3M_1D"): RawOptionProjectionInput {
+function withMockDataSource(projection: RawOptionProjectionInput, timeframe: SelectedTimeframe = "5D_15M"): RawOptionProjectionInput {
   return {
     ...projection,
     dataSource: {
@@ -31,6 +31,10 @@ function withMockDataSource(projection: RawOptionProjectionInput, timeframe: Sel
 
 function getMockMarketTimeframe(timeframe: SelectedTimeframe, candlesReturned: number): MarketTimeframeMetadata {
   const config: Record<SelectedTimeframe, Omit<MarketTimeframeMetadata, "candlesReturned">> = {
+    "1D_1M": { key: "1D_1M", alpacaTimeframe: "1Min", displayInterval: "1m", lookbackDays: 2, limit: 1000 },
+    "5D_15M": { key: "5D_15M", alpacaTimeframe: "15Min", displayInterval: "15m", lookbackDays: 7, limit: 500 },
+    "3M_4H": { key: "3M_4H", alpacaTimeframe: "1Hour", displayInterval: "4H", lookbackDays: 100, limit: 1000 },
+    "1Y_1D": { key: "1Y_1D", alpacaTimeframe: "1Day", displayInterval: "1D", lookbackDays: 370, limit: 300 },
     "5D_5M": { key: "5D_5M", alpacaTimeframe: "5Min", lookbackDays: 7, limit: 500 },
     "30D_30M": { key: "30D_30M", alpacaTimeframe: "30Min", lookbackDays: 35, limit: 500 },
     "3M_1D": { key: "3M_1D", alpacaTimeframe: "1Day", lookbackDays: 100, limit: 100 },
